@@ -49,6 +49,23 @@ def compute_distance(p1, p2):
     return math.sqrt(dx**2 + dy**2)
 
 
+class History:
+    def __init__(self, buf_size, state_size) -> None:
+        self.state_size = state_size
+        self.buffer = deque(maxlen=buf_size)
+        for _ in range(buf_size):
+            self.buffer.append(np.zeros([state_size]))
+
+    def insert(self, element):
+        self.buffer.appendleft(np.array(element))
+
+    def form_np(self):
+        res = np.array([])
+        for val in self.buffer:
+            res = np.append(res, val)
+        return res
+
+
 def main(args):
     print("==algo: ", args.algo)
     print(f'device: {device}')
@@ -74,6 +91,8 @@ def main(args):
     obs_dim = 30 * 30
     print(f'action dimension: {act_dim}')
     print(f'observation dimension: {obs_dim}')
+
+
 
     torch.manual_seed(args.seed)
     # 定义保存路径
@@ -107,9 +126,13 @@ def main(args):
 
     while episode < args.max_episodes:
         state = env.reset()    #[{'obs':[25,25], "control_player_index": 0}, {'obs':[25,25], "control_player_index": 1}]
+        history = History(3, obs_dim)
         if RENDER:
             env.env_core.render()
         obs_ctrl_agent = np.array(state[ctrl_agent_index]['obs']).flatten()     #[30*30]
+        history.insert(obs_ctrl_agent)
+        obs_ctrl_agent = history.form_np()  #[30*30*3]
+
         obs_oppo_agent = np.array(state[1-ctrl_agent_index]['obs']).flatten()   #[30*30]
 
         episode += 1
@@ -117,7 +140,6 @@ def main(args):
         Gt = 0
 
         while True:
-
             ################################# collect opponent action #############################
             oppo_action_raw, _ = opponent_agent.select_action(obs_oppo_agent, False)
             if args.opponent != 'random':
@@ -128,7 +150,7 @@ def main(args):
                 # action_opponent = [[50], [0]]
 
             ################################# collect our action ################################
-            action_ctrl_raw, action_prob= model.select_action(obs_ctrl_agent, False if args.load_model else True)
+            action_ctrl_raw, action_prob = model.select_action(obs_ctrl_agent, False if args.load_model else True)
                             #inference
             action_ctrl = actions_map[action_ctrl_raw]
             action_ctrl = [[action_ctrl[0]], [action_ctrl[1]]]        #wrapping up the action
@@ -159,6 +181,8 @@ def main(args):
 
             obs_oppo_agent = np.array(next_obs_oppo_agent).flatten()
             obs_ctrl_agent = np.array(next_obs_ctrl_agent).flatten()
+            history.insert(obs_ctrl_agent)
+            obs_ctrl_agent = history.form_np()
             if RENDER:
                 env.env_core.render()
             Gt += reward[ctrl_agent_index] if done else 0

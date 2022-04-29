@@ -26,7 +26,7 @@ class Args:
 
     action_space = 36
     # action_space = 3
-    state_space = 900
+    state_space = 900 * 3
 
 
 args = Args()
